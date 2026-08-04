@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pioneer Beta Application — FLASHYAF™</title>
-<meta name="robots" content="noindex">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Permissions-Policy" content="camera=(), geolocation=(), microphone=()">
 <link rel="stylesheet" href="styles.css">
 <style>
   .gate-wrap{max-width:520px;margin:0 auto;padding:90px 5% 60px;text-align:center;}
@@ -240,14 +242,35 @@
   import { firebaseConfig } from "./firebase-config.js";
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp, updateDoc
+    getFunctions, httpsCallable
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+  import {
+    getFirestore, doc, collection, runTransaction, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const app = initializeApp(firebaseConfig);
+  const functions = getFunctions(app);
   const db = getFirestore(app);
+  const submitBetaApplication = httpsCallable(functions, "submitBetaApplication");
 
   const params = new URLSearchParams(window.location.search);
   const token = (params.get("token") || "").trim();
+
+  // SECURITY FIX: this page used to read betaApplicationTokens directly
+  // from Firestore to check the token/email/expiry before showing the
+  // form. That's now blocked entirely (firestore.rules denies all client
+  // access to that collection) — validation happens server-side, inside
+  // submitBetaApplication, at the moment the whole application is
+  // submitted. One UX tradeoff worth knowing: if a token is expired,
+  // already used, or the email doesn't match, the person now finds out
+  // at the end (on submit) rather than before filling out the form. They
+  // can just fix the email and resubmit without losing their answers.
+  //
+  // Drop the token out of the visible URL once we have it in memory, so
+  // it doesn't linger in browser history any longer than necessary.
+  if (token) {
+    history.replaceState({}, document.title, window.location.pathname);
+  }
 
   const gateScreen = document.getElementById("gate-screen");
   const appScreen = document.getElementById("app-screen");
@@ -255,14 +278,39 @@
   const gateEmailInput = document.getElementById("gate-email");
   const gateSubmitBtn = document.getElementById("gate-submit-btn");
   const gateError = document.getElementById("gate-error");
-  const gateLoading = document.getElementById("gate-loading");
 
   let verifiedEmail = null;
-  let tokenDocRef = null;
 
   function showGateError(message) {
     gateError.textContent = message;
     gateError.style.display = "block";
+  }
+
+  // Deployment bridge: GitHub Pages can publish before Firebase Functions
+  // finishes deploying. While the old Firestore rules are still live, this
+  // atomic transaction prevents form downtime. Once the new rules deploy,
+  // direct client access is denied and the callable function is the only path.
+  async function submitWithLegacyRules(application) {
+    const tokenRef = doc(db, "betaApplicationTokens", token);
+    const applicationRef = doc(collection(db, "betaApplications"));
+
+    await runTransaction(db, async (transaction) => {
+      const tokenSnapshot = await transaction.get(tokenRef);
+      if (!tokenSnapshot.exists()) throw new Error("This application link is invalid.");
+
+      const tokenData = tokenSnapshot.data();
+      if (tokenData.used === true) throw new Error("This application link has already been used.");
+      const expiresAt = tokenData.expiresAt?.toDate?.();
+      if (!expiresAt || expiresAt.getTime() <= Date.now()) {
+        throw new Error("This application link has expired.");
+      }
+      if (String(tokenData.email || "").trim().toLowerCase() !== application.email) {
+        throw new Error("This application link doesn't match the email provided.");
+      }
+
+      transaction.set(applicationRef, { ...application, submittedAt: serverTimestamp() });
+      transaction.update(tokenRef, { used: true, usedAt: serverTimestamp() });
+    });
   }
 
   if (!token) {
@@ -270,7 +318,7 @@
     gateSubmitBtn.disabled = true;
   }
 
-  gateSubmitBtn.addEventListener("click", async () => {
+  gateSubmitBtn.addEventListener("click", () => {
     gateError.style.display = "none";
     const enteredEmail = gateEmailInput.value.trim().toLowerCase();
     if (!enteredEmail) {
@@ -279,49 +327,16 @@
     }
     if (!token) return;
 
-    gateLoading.style.display = "block";
-    gateSubmitBtn.disabled = true;
-
-    try {
-      const ref = doc(db, "betaApplicationTokens", token);
-      const snap = await getDoc(ref);
-
-      if (!snap.exists()) {
-        showGateError("We couldn't find an application matching this link. Please use the exact link from your confirmation email.");
-        return;
-      }
-      const data = snap.data();
-
-      if (data.expiresAt && typeof data.expiresAt.toDate === "function" && data.expiresAt.toDate() < new Date()) {
-        showGateError("This application link has expired — links are valid for 2 weeks. Please contact customersupport@flashyafapp.com and we'll send you a fresh one.");
-        return;
-      }
-
-      if (data.used === true) {
-        showGateError("This application link has already been used. If you believe this is a mistake, contact customersupport@flashyafapp.com.");
-        return;
-      }
-      if ((data.email || "").toLowerCase() !== enteredEmail) {
-        showGateError("That email address doesn't match this application link. Please double-check and try again.");
-        return;
-      }
-
-      verifiedEmail = enteredEmail;
-      tokenDocRef = ref;
-      const q2Email = document.getElementById("q2-email");
-      q2Email.value = enteredEmail;
-      q2Email.readOnly = true;
-      gateScreen.style.display = "none";
-      appScreen.style.display = "block";
-      window.scrollTo({ top: 0, behavior: "smooth" });
-
-    } catch (err) {
-      console.error(err);
-      showGateError("Something went wrong checking your link. Please try again in a moment.");
-    } finally {
-      gateLoading.style.display = "none";
-      gateSubmitBtn.disabled = false;
-    }
+    // No Firestore check here anymore — just move to the form. The real
+    // verification (token valid/unused/unexpired, email matches) happens
+    // when the whole application is submitted below.
+    verifiedEmail = enteredEmail;
+    const q2Email = document.getElementById("q2-email");
+    q2Email.value = enteredEmail;
+    q2Email.readOnly = true;
+    gateScreen.style.display = "none";
+    appScreen.style.display = "block";
+    window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
   document.getElementById("beta-form").addEventListener("submit", async (e) => {
@@ -335,7 +350,7 @@
     try {
       const q12 = Array.from(document.querySelectorAll('input[name="q12"]:checked')).map(el => el.value);
 
-      await addDoc(collection(db, "betaApplications"), {
+      const application = {
         name: document.getElementById("q1-name").value.trim(),
         email: verifiedEmail,
         ageRange: document.querySelector('input[name="q3"]:checked')?.value || "",
@@ -349,12 +364,17 @@
         whyJoin: document.getElementById("q11-why").value.trim(),
         fallbackPreferences: q12,
         pledgeAgreed: document.getElementById("q13-agree").checked,
-        token: token,
-        submittedAt: serverTimestamp()
-      });
+      };
 
-      if (tokenDocRef) {
-        await updateDoc(tokenDocRef, { used: true, usedAt: serverTimestamp() });
+      try {
+        await submitBetaApplication({ token, application });
+      } catch (functionError) {
+        const code = String(functionError?.code || "");
+        if (code === "functions/not-found" || code === "functions/unavailable") {
+          await submitWithLegacyRules(application);
+        } else {
+          throw functionError;
+        }
       }
 
       appScreen.style.display = "none";
@@ -363,7 +383,10 @@
 
     } catch (err) {
       console.error(err);
-      submitError.textContent = "Something went wrong submitting your application. Please try again, or email customersupport@flashyafapp.com.";
+      // The Cloud Function returns specific messages for expired/used/
+      // mismatched-email cases (via err.message) — show those directly
+      // when available so the person knows what to fix.
+      submitError.textContent = err?.message || "Something went wrong submitting your application. Please try again, or email customersupport@flashyafapp.com.";
       submitError.style.display = "block";
       submitBtn.disabled = false;
       submitBtn.textContent = "Submit My Application";

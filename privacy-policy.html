@@ -50,7 +50,7 @@
   <ul>
     <li><b>Account:</b> Name, email address, age range, menopause-related transition stage</li>
     <li><b>Flash session data:</b> Stage timestamps, intensity, duration, voice command inputs</li>
-    <li><b>Voice notes:</b> Captured locally on your device via Memory Vault™. Not transmitted to our servers — yours only.</li>
+    <li><b>Voice notes:</b> Captured via Memory Vault™. Stored locally on your device by default. You may choose to enable optional cloud storage, in which case your voice note is securely uploaded to your account.</li>
     <li><b>Device info:</b> App version, OS, device type (for bug resolution only)</li>
     <li><b>Payment:</b> Processed entirely by Stripe. We never see or store your card numbers.</li>
   </ul>
@@ -61,17 +61,17 @@
     <li>We do not share your personal health data with advertisers.</li>
     <li>We do not allow third-party tracking pixels on any health interaction screen.</li>
     <li>We do not share health data through referral URLs.</li>
-    <li>We do not passively listen through your microphone at any time. The microphone activates only when you initiate a voice command, with a 30-second hard timeout (Mic Privacy Lock™) that automatically closes it after each command.</li>
+    <li>Your microphone listens continuously for the "Hey Flashy" wake word so you can use FLASHYAF™ hands-free. This listening is processed through your browser's built-in speech recognition service (in most browsers, this routes audio to Google's speech-to-text service) to detect the wake word — it is not stored by us. Once the wake word is detected, the mic activates for your command, with a 30-second hard timeout (Mic Privacy Lock™) that automatically closes it after each command.</li>
   </ul>
 
   <h2>How we protect your privacy</h2>
-  <p>Your personal information — name, email, account details, flash session data — lives in a separate, encrypted environment from any optional research data. Your voice notes stay on your device via Memory Vault™ and never reach our servers. If you opt into a research study, only an anonymous identifier is shared — never your name, email, or other personally identifiable information. No data moves between these environments without your affirmative, explicit consent.</p>
+  <p>Your account and flash-session data are stored in Firebase with access controls that limit records to the account owner and authorized administration. Voice notes are stored on your device via Memory Vault™ by default, unless you choose optional cloud storage. Research summaries include only records from members who have affirmatively enabled research participation, and public aggregate results are suppressed until enough consenting participants exist to reduce the risk of identifying an individual. Raw personal flash records are not made public.</p>
 
   <h2>Data breach notification</h2>
   <p>FLASHYAF™ operates as a Vendor of Personal Health Records under the FTC Health Breach Notification Rule (16 CFR Part 318). In the event of a breach affecting 500+ users, we will notify affected individuals without unreasonable delay and no later than 60 days after discovery, and will notify the FTC at the same time.</p>
 
   <h2>Your data after cancellation</h2>
-  <p>Your account data is retained for 90 days after cancellation, during which you can export your complete flash history. After 90 days, it is permanently deleted. Any anonymous research data you contributed cannot be linked back to you and remains in an isolated research database for the duration of the approved study only.</p>
+  <p>When you choose to delete your account, you can either request immediate deletion or pause the cloud account for 90 days. Starting either option clears FLASHYAF™ data stored locally by the app on that device, including local-only notes and recordings; that device-only content cannot be restored. During a 90-day pause, you may log back in to cancel the pending cloud deletion. If you do not return, the remaining server-held account data is permanently deleted after the pause. De-identified aggregate statistics already calculated from consenting participants may remain because they are not linked to an identifiable account.</p>
 
   <h2>Pioneer Member pricing window</h2>
   <p>Pioneer Member pricing is locked for exactly 24 calendar months from the public launch date. This is not a lifetime rate. Existing subscribers receive advance notice before any pricing change and may cancel before it takes effect, without penalty.</p>
